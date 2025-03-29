@@ -1,50 +1,106 @@
 # BuildTool
 
-BuildTool is a shell script to automate versioning for GitHub commits using semantic versioning (`vMAJOR.MINOR.PATCH.BUILD`). It automatically tags each commit and pushes the tag along with the commit.
+BuildTool is a Python utility that automates versioning for GitHub commits using semantic versioning (`vMAJOR.MINOR.PATCH.BUILD`). It automatically tags each commit and pushes the tag along with the commit.
 
-## Usage
+## Features
 
-```bash
-git add <files>
-git commit -m "message"
-build
-
-
-•	Starts at v1.0.0.0 if no tags exist.
-•	If the latest commit has no tag, it bumps the patch version.
-•	If a manual tag exists with a higher major.minor, it uses that and bumps the patch.
-•	Tags and pushes both the commit and the version to GitHub.
-
-Example
-	•	First commit → v1.0.0.0
-	•	Next commits → v1.0.0.1, v1.0.0.2, etc.
-	•	After manually tagging v2.0.0.0, BuildTool will create v2.0.0.1, v2.0.0.2, etc.
-
-Check if BuildTool is installed with: build -version
+- Automatic version management with semantic versioning
+- Simple one-line installation
+- Support for custom version numbers
+- Cross-platform (macOS, Linux, Windows)
 
 ## Installation
 
-To install the build tool, run the following command in your terminal:
+### One-Line Installation (macOS/Linux)
 
 ```bash
-curl -O https://raw.githubusercontent.com/yourusername/your-repo/main/install_build_tool.sh
-chmod +x install_build_tool.sh
-./install_build_tool.sh
+curl -sSL https://raw.githubusercontent.com/yourusername/BuildTool/main/build | sudo python3 - install
 ```
 
-## Updating
+### One-Line Installation (Windows PowerShell)
 
-To update the build tool to the latest version, simply run:
+```powershell
+powershell -Command "Invoke-WebRequest -Uri https://raw.githubusercontent.com/yourusername/BuildTool/main/build -OutFile build.py; python build.py install"
+```
+
+### Manual Installation
+
+1. Download the script:
+```bash
+curl -O https://raw.githubusercontent.com/yourusername/BuildTool/main/build
+```
+
+2. Make it executable:
+```bash
+chmod +x build
+```
+
+3. Install it:
+```bash
+sudo ./build install
+```
+
+## Usage
+
+### Basic Usage
+After committing your changes, run the build tool to automatically tag and push:
+
+```bash
+git add <files>
+git commit -m "your commit message"
+build
+```
+
+This will:
+- Check for existing version tags
+- Increment the BUILD number
+- Tag the commit
+- Push the tag to GitHub
+
+### Check Current Version
+
+```bash
+build version
+```
+
+### Set Custom Version
+
+```bash
+build 2.0.0
+```
+
+This will set the version to v2.0.0.0 (automatically appending the build number).
+
+### Override Version Check
+
+If you want to set a version that isn't higher than the current one:
+
+```bash
+build -o 1.5.0
+```
+
+### Update BuildTool
+
+To update to the latest version of the build tool:
 
 ```bash
 build update
 ```
+
+### Check BuildTool Version
+
+```bash
+build -v
 ```
 
-### Summary
+## Version Number Logic
 
-- The build tool script handles versioning and updates.
-- A shell script automates the installation and setup process.
-- Users can easily install and update the tool with simple commands.
+- Starts at v1.0.0.0 if no tags exist
+- If the latest commit has no tag, it bumps the BUILD version
+- If a manual tag exists with a higher MAJOR.MINOR.PATCH, it uses that and appends .0 for BUILD
+- Tags and pushes both the commit and the version to GitHub
 
-Feel free to adjust the repository URL and any other details as necessary! Let me know if you need further assistance or modifications!
+Example:
+- First commit → v1.0.0.0
+- Next commits → v1.0.0.1, v1.0.0.2, etc.
+- After manually setting v2.0.0, BuildTool will create v2.0.0.0, then v2.0.0.1, etc.
