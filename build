@@ -3,8 +3,9 @@
 import subprocess
 import re
 import sys
+import platform
 
-TOOL_VERSION = "1.0.0"  # This is the version of the *build tool itself*, not your repo version
+TOOL_VERSION = "1.0.0.0"  # This is the version of the *build tool itself*, not your repo version, Major.Minor.Patch.Build
 
 DEFAULT_BRANCH = "main"  # Update if your default branch is different
 
@@ -25,28 +26,47 @@ def get_commit_tag():
     return tag if tag else None
 
 def bump_patch_version(current_version):
-    major, minor, patch = map(int, current_version[1:].split('.'))
-    patch += 1
-    return f"v{major}.{minor}.{patch}"
+    major, minor, patch, build = map(int, current_version[1:].split('.'))
+    build += 1  # Increment the build version
+    return f"v{major}.{minor}.{patch}.{build}"
 
 def parse_version(tag):
-    match = re.match(r"v(\d+)\.(\d+)\.(\d+)", tag)
+    match = re.match(r"v(\d+)\.(\d+)\.(\d+)\.(\d+)", tag)
     if match:
-        major, minor, patch = map(int, match.groups())
-        return major, minor, patch
+        major, minor, patch, build = map(int, match.groups())
+        return major, minor, patch, build
     else:
         print(f"❌ Invalid tag format: {tag}")
         exit(1)
 
-def main():
+def get_latest_build_tag():
+    latest_tag = get_latest_tag()
+    if latest_tag:
+        print(latest_tag)  # Only print the latest tag
+
+def update_build_tool():
+    if platform.system() == "Darwin":  # Check if the OS is macOS
+        print("🔄 Updating build tool...")
+        run_command("git pull origin main")  # Pull the latest version from the remote
+        print("✅ Build tool updated successfully.")
+    else:
+        print("❌ This update command is only available on macOS.")
+
+def main(): 
     if len(sys.argv) > 1 and sys.argv[1] in ['-v', '--version', '-version']:
         print(f"Build Tool version {TOOL_VERSION}")
+        return
+    elif len(sys.argv) > 1 and sys.argv[1] == 'build':
+        get_latest_build_tag()
+        return
+    elif len(sys.argv) > 1 and sys.argv[1] == 'update':
+        update_build_tool()
         return
 
     latest_tag = get_latest_tag()
 
     if latest_tag is None:
-        new_version = "v1.0.0"
+        new_version = "v1.0.0.0"
         print(f"🔨 No existing tags. Starting at {new_version}")
     else:
         print(f"🔖 Latest version is {latest_tag}")
@@ -64,9 +84,9 @@ def main():
         unpushed_tags = [tag for tag in unpushed_tags if tag.startswith('v')]
 
         if unpushed_tags:
-            latest_major, latest_minor, _ = parse_version(latest_tag)
+            latest_major, latest_minor, latest_patch, _ = parse_version(latest_tag)
             for tag in unpushed_tags:
-                major, minor, patch = parse_version(tag)
+                major, minor, patch, build = parse_version(tag)
                 if (major < latest_major) or (major == latest_major and minor <= latest_minor):
                     print(f"❌ New tag {tag} has major.minor ({major}.{minor}) <= latest tag {latest_tag}. Aborting.")
                     exit(1)
