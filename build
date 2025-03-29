@@ -4,10 +4,14 @@ import subprocess
 import re
 import sys
 import platform
+import os
+import argparse
+import shutil
+import tempfile
 
 TOOL_VERSION = "1.0.0.0"  # This is the version of the *build tool itself*, not your repo version, Major.Minor.Patch.Build
-
 DEFAULT_BRANCH = "main"  # Update if your default branch is different
+GITHUB_REPO = "yourusername/BuildTool"  # Change this to your GitHub username and repo name
 
 def run_command(cmd):
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
@@ -39,30 +43,142 @@ def parse_version(tag):
         print(f"❌ Invalid tag format: {tag}")
         exit(1)
 
+def is_version_higher(new_version, current_version):
+    new_m, new_n, new_p, _ = parse_version(new_version)
+    cur_m, cur_n, cur_p, _ = parse_version(current_version)
+    
+    if new_m > cur_m:
+        return True
+    if new_m == cur_m and new_n > cur_n:
+        return True
+    if new_m == cur_m and new_n == cur_n and new_p > cur_p:
+        return True
+    return False
+
 def get_latest_build_tag():
     latest_tag = get_latest_tag()
     if latest_tag:
-        print(latest_tag)  # Only print the latest tag
+        print(f"Current version: {latest_tag}")
+        return latest_tag
+    else:
+        print("No version tags found")
+        return None
 
 def update_build_tool():
-    if platform.system() == "Darwin":  # Check if the OS is macOS
-        print("🔄 Updating build tool...")
-        run_command("git pull origin main")  # Pull the latest version from the remote
-        print("✅ Build tool updated successfully.")
-    else:
-        print("❌ This update command is only available on macOS.")
+    """Update the build tool by downloading the latest version from GitHub"""
+    print("🔄 Updating build tool...")
+    try:
+        # Create a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.chdir(temp_dir)
+            
+            # Download the latest version
+            raw_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/build"
+            if platform.system() == "Windows":
+                run_command(f'powershell -Command "Invoke-WebRequest -Uri {raw_url} -OutFile build.py"')
+            else:
+                run_command(f'curl -sSL {raw_url} -o build.py')
+            
+            # Make it executable
+            if platform.system() != "Windows":
+                run_command('chmod +x build.py')
+            
+            # Install the updated version
+            bin_path = "/usr/local/bin/build" if platform.system() != "Windows" else os.path.join(os.environ.get('LOCALAPPDATA'), 'build.py')
+            shutil.copy2('build.py', bin_path)
+            
+            if platform.system() != "Windows":
+                run_command(f"chmod +x {bin_path}")
+            
+            print("✅ Build tool updated successfully to the latest version.")
+    except Exception as e:
+        print(f"❌ Failed to update build tool: {e}")
+        print("Try running with sudo: sudo build update")
 
-def main(): 
-    if len(sys.argv) > 1 and sys.argv[1] in ['-v', '--version', '-version']:
+def install_build_tool():
+    """Install the build tool to make it available as a command"""
+    script_path = os.path.abspath(__file__)
+    
+    if platform.system() == "Windows":
+        bin_path = os.path.join(os.environ.get('LOCALAPPDATA'), 'build.py')
+        try:
+            shutil.copy2(script_path, bin_path)
+            # Add the directory to PATH if it's not already there
+            print("✅ Build tool installed successfully.")
+            print("Make sure your PATH includes the LocalAppData directory.")
+        except Exception as e:
+            print(f"❌ Failed to install build tool: {e}")
+            print("Try running as administrator.")
+    else:
+        bin_path = "/usr/local/bin/build"
+        try:
+            shutil.copy2(script_path, bin_path)
+            run_command(f"chmod +x {bin_path}")
+            print("✅ Build tool installed successfully. You can now use 'build' command from anywhere.")
+        except Exception as e:
+            print(f"❌ Failed to install build tool: {e}")
+            print("Try running with sudo: sudo build install")
+
+def direct_install():
+    """Save script to a temporary file and then install it"""
+    temp_path = f"/tmp/build_tool_{os.getpid()}"
+    try:
+        # Save the script to a temporary file
+        with open(temp_path, 'w') as f:
+            f.write(open(__file__).read())
+        os.chmod(temp_path, 0o755)
+        
+        # Install from the temporary file
+        if platform.system() == "Windows":
+            bin_path = os.path.join(os.environ.get('LOCALAPPDATA'), 'build.py')
+        else:
+            bin_path = "/usr/local/bin/build"
+            
+        shutil.copy2(temp_path, bin_path)
+        
+        if platform.system() != "Windows":
+            run_command(f"chmod +x {bin_path}")
+            
+        os.remove(temp_path)
+        print("✅ Build tool installed successfully. You can now use 'build' command from anywhere.")
+    except Exception as e:
+        print(f"❌ Failed to install build tool: {e}")
+        if platform.system() == "Windows":
+            print("Try running as administrator.")
+        else:
+            print("Try running with sudo: sudo curl -sSL [URL] | python3 - install")
+
+def main():
+    # Check if being run as a piped install
+    if len(sys.argv) > 1 and sys.argv[1] == 'install' and not os.path.isfile(__file__):
+        direct_install()
+        return
+        
+    parser = argparse.ArgumentParser(description="Build tool for version management")
+    parser.add_argument('-v', '--version', action='store_true', help='Show build tool version')
+    parser.add_argument('command', nargs='?', default=None, help='Command to execute (build, version, update, install)')
+    parser.add_argument('-o', '--override', action='store_true', help='Override version checks')
+    parser.add_argument('custom_version', nargs='?', default=None, help='Set custom version (major.minor.patch)')
+    
+    args = parser.parse_args()
+
+    if args.version:
         print(f"Build Tool version {TOOL_VERSION}")
         return
-    elif len(sys.argv) > 1 and sys.argv[1] == 'build':
+    
+    if args.command == 'version':
         get_latest_build_tag()
         return
-    elif len(sys.argv) > 1 and sys.argv[1] == 'update':
+    
+    if args.command == 'update':
         update_build_tool()
         return
+        
+    if args.command == 'install':
+        install_build_tool()
+        return
 
+    # If no arguments or 'build' command, proceed with version management
     latest_tag = get_latest_tag()
 
     if latest_tag is None:
@@ -77,31 +193,56 @@ def main():
             print(f"✅ Current commit already tagged as: {current_commit_tag}")
             new_version = current_commit_tag
         else:
-            new_version = bump_patch_version(latest_tag)
-            print(f"🔼 No tag found on latest commit. Auto-bumping to {new_version}")
+            if args.custom_version:
+                # User specified a custom version
+                custom_ver = args.custom_version
+                if not custom_ver.startswith('v'):
+                    custom_ver = f"v{custom_ver}.0"  # Add v prefix and .0 for build
+                elif '.' not in custom_ver[1:]:
+                    custom_ver = f"{custom_ver}.0"  # Add .0 for build
+                
+                # Check if version format is correct
+                try:
+                    major, minor, patch, build = parse_version(custom_ver)
+                    new_version = f"v{major}.{minor}.{patch}.{build}"
+                    
+                    # Check if version is higher than latest unless override is set
+                    if not args.override and not is_version_higher(new_version, latest_tag):
+                        print(f"❌ New version {new_version} is not higher than latest version {latest_tag}")
+                        print("Use -o/--override to force this version")
+                        exit(1)
+                except:
+                    print(f"❌ Invalid version format: {custom_ver}")
+                    print("Format should be: major.minor.patch")
+                    exit(1)
+            else:
+                new_version = bump_patch_version(latest_tag)
+                print(f"🔼 No tag found on latest commit. Auto-bumping to {new_version}")
 
         unpushed_tags = run_command("git tag --points-at HEAD").split("\n")
         unpushed_tags = [tag for tag in unpushed_tags if tag.startswith('v')]
 
-        if unpushed_tags:
+        if unpushed_tags and not args.custom_version:
             latest_major, latest_minor, latest_patch, _ = parse_version(latest_tag)
             for tag in unpushed_tags:
                 major, minor, patch, build = parse_version(tag)
-                if (major < latest_major) or (major == latest_major and minor <= latest_minor):
-                    print(f"❌ New tag {tag} has major.minor ({major}.{minor}) <= latest tag {latest_tag}. Aborting.")
+                if not args.override and ((major < latest_major) or 
+                   (major == latest_major and minor < latest_minor) or
+                   (major == latest_major and minor == latest_minor and patch < latest_patch)):
+                    print(f"❌ New tag {tag} is lower than latest tag {latest_tag}")
+                    print("Use -o/--override to force this version")
                     exit(1)
-                else:
-                    print(f"✅ User-provided tag {tag} is valid.")
-                    new_version = tag
-                    break
 
-    print(f"🏷️ Final version: {new_version}")
+    # Prompt for confirmation before applying tag and pushing
+    confirmation = input(f"✅ Ready to tag as {new_version} and push. Continue? (y/n): ")
+    if confirmation.lower() != 'y':
+        print("Operation canceled by user")
+        exit(0)
 
-    run_command(f'git tag -f {new_version}')
-    run_command(f'git push origin {DEFAULT_BRANCH}')
+    # Create and push the tag
+    run_command(f'git tag {new_version}')
     run_command(f'git push origin {new_version}')
-
-    print(f"✅ Version {new_version} pushed to {DEFAULT_BRANCH} and remote.")
+    print(f"🚀 Successfully tagged and pushed {new_version}")
 
 if __name__ == "__main__":
     main()
